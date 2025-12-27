@@ -413,6 +413,17 @@
         }
     };
 
+    const resumeFromSavedPosition = () => {
+        if (!state.currentTrackKey) return;
+        const savedPosition = state.playbackPositions[state.currentTrackKey];
+        if (savedPosition && savedPosition < elements.audio.duration - 1) {
+            elements.audio.currentTime = savedPosition;
+            elements.seekBar.value = savedPosition;
+            elements.currentTime.textContent = formatTime(savedPosition);
+            appendLog(`Resuming at ${formatTime(savedPosition)}.`);
+        }
+    };
+
     const playTrack = (bookName, index) => {
         const tracks = state.books[bookName];
         if (!tracks || !tracks[index]) return;
@@ -420,15 +431,26 @@
         persistCurrentPlayback();
 
         const track = tracks[index];
+        const nextTrackKey = buildTrackKey(bookName, track);
+        const isSameTrack = state.currentTrackKey === nextTrackKey && elements.audio.src === track.url;
+
         state.currentBook = bookName;
         state.currentTrackIndex = index;
-        state.currentTrackKey = buildTrackKey(bookName, track);
+        state.currentTrackKey = nextTrackKey;
         state.lastSavedPosition = state.playbackPositions[state.currentTrackKey] || 0;
 
         elements.trackTitle.textContent = track.name;
         elements.bookTitle.textContent = bookName;
-        elements.audio.src = track.url;
-        appendLog(`Playing ${bookName} / ${track.name}`);
+
+        if (!isSameTrack) {
+            elements.audio.src = track.url;
+            appendLog(`Playing ${bookName} / ${track.name}`);
+        } else {
+            appendLog(`Resuming ${bookName} / ${track.name}`);
+            if (elements.audio.readyState >= 1) {
+                resumeFromSavedPosition();
+            }
+        }
 
         elements.audio.play().catch(err => {
             appendLog(`Playback failed: ${err.message || err}`);
@@ -463,15 +485,7 @@
     elements.audio.addEventListener('loadedmetadata', () => {
         elements.duration.textContent = formatTime(elements.audio.duration);
         elements.seekBar.max = elements.audio.duration || 0;
-        if (state.currentTrackKey) {
-            const savedPosition = state.playbackPositions[state.currentTrackKey];
-            if (savedPosition && savedPosition < elements.audio.duration - 1) {
-                elements.audio.currentTime = savedPosition;
-                elements.seekBar.value = savedPosition;
-                elements.currentTime.textContent = formatTime(savedPosition);
-                appendLog(`Resuming at ${formatTime(savedPosition)}.`);
-            }
-        }
+        resumeFromSavedPosition();
     });
 
     elements.seekBar.addEventListener('input', (event) => {
