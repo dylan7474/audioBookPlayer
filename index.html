@@ -72,7 +72,7 @@
         return h > 0 ? `${h}:${mStr}:${sStr}` : `${mStr}:${sStr}`;
     };
 
-    const APP_VERSION = "1.0.0";
+    const APP_VERSION = "1.0.1";
 
     const App = () => {
         // --- State ---
@@ -89,6 +89,7 @@
         const [error, setError] = useState(null);
         const [loading, setLoading] = useState(false);
         const [sourceMode, setSourceMode] = useState('none'); // 'server', 'local', 'none'
+        const [debugLog, setDebugLog] = useState([]);
 
         const audioRef = useRef(null);
         const timerRef = useRef(null);
@@ -123,10 +124,18 @@
             }
         };
 
+        const appendDebug = (message) => {
+            const timestamp = new Date().toLocaleTimeString();
+            const line = `[${timestamp}] ${message}`;
+            setDebugLog(prev => [...prev.slice(-99), line]);
+            console.log(line);
+        };
+
         const scanServer = async () => {
             setLoading(true);
             setError(null);
             setBooks({});
+            appendDebug("Scanning server for books...");
             
             try {
                 const rootPath = './books';
@@ -158,6 +167,7 @@
                         if (tracks.length > 0) {
                             newBooks[bookName] = tracks;
                             foundAny = true;
+                            appendDebug(`Found ${tracks.length} tracks in ${bookName}`);
                         }
                     } else if (item.href.toLowerCase().endsWith('.mp3')) {
                         // Loose file in root
@@ -168,6 +178,7 @@
                             size: 0
                         });
                         foundAny = true;
+                        appendDebug(`Found loose track ${item.href}`);
                     }
                 }
 
@@ -177,10 +188,12 @@
 
                 setBooks(newBooks);
                 setSourceMode('server');
+                appendDebug(`Server scan complete. Books: ${Object.keys(newBooks).length}`);
 
             } catch (err) {
                 console.error(err);
                 setError(err.message);
+                appendDebug(`Server scan error: ${err.message}`);
             } finally {
                 setLoading(false);
             }
@@ -224,9 +237,11 @@
 
                 setBooks(bookMap);
                 setSourceMode('local');
+                appendDebug(`Loaded local files. Books: ${Object.keys(bookMap).length}`);
             } catch (err) {
                 console.error("Error loading files:", err);
                 setError("Failed to load files.");
+                appendDebug("Local file load error.");
             } finally {
                 setLoading(false);
             }
@@ -243,12 +258,14 @@
                         console.log("Play auto-start prevented", e);
                         setIsPlaying(false);
                         setError("Playback was blocked by the browser. Try clicking play again.");
+                        appendDebug(`Playback blocked: ${e.message || e}`);
                     });
                 }
             } catch (e) {
                 console.error("Audio play failed", e);
                 setIsPlaying(false);
                 setError("Playback failed to start. Please try again.");
+                appendDebug(`Playback failed: ${e.message || e}`);
             }
         };
 
@@ -265,6 +282,7 @@
                 } else if (track.url) {
                     src = track.url;
                 }
+                appendDebug(`Attempting to play ${bookName} / ${track.name} from ${src}`);
 
                 // Unique ID for storage
                 // In server mode size is 0, so we rely on book+name. In local mode we add size for robustness.
@@ -277,6 +295,7 @@
                 if (audioRef.current) {
                     audioRef.current.src = src;
                     audioRef.current.load();
+                    appendDebug(`Audio src set. readyState=${audioRef.current.readyState}`);
                     
                     // Restore Position
                     const savedPos = localStorage.getItem(storageKey);
@@ -293,6 +312,7 @@
             } catch (err) {
                 console.error("Error playing track:", err);
                 setError(`Could not play track. ${err.message}`);
+                appendDebug(`Play track error: ${err.message}`);
             }
         };
 
@@ -317,6 +337,7 @@
             const updateTime = () => setCurrentTime(audio.currentTime);
             const updateDuration = () => setDuration(audio.duration);
             const onEnded = () => {
+                appendDebug("Track ended.");
                 if (currentBook && books[currentBook] && currentTrackIndex < books[currentBook].length - 1) {
                     playTrack(currentBook, currentTrackIndex + 1);
                 } else {
@@ -327,18 +348,28 @@
                 console.error("Audio error", e); 
                 setIsPlaying(false);
                 setError("Audio failed to load. Check that the file exists and is playable.");
+                appendDebug(`Audio error event. code=${audio?.error?.code || "unknown"}`);
             };
+            const onCanPlay = () => appendDebug("Audio canplay event fired.");
+            const onPlay = () => appendDebug("Audio play event fired.");
+            const onPause = () => appendDebug("Audio pause event fired.");
 
             audio.addEventListener('timeupdate', updateTime);
             audio.addEventListener('loadedmetadata', updateDuration);
             audio.addEventListener('ended', onEnded);
             audio.addEventListener('error', onError);
+            audio.addEventListener('canplay', onCanPlay);
+            audio.addEventListener('play', onPlay);
+            audio.addEventListener('pause', onPause);
 
             return () => {
                 audio.removeEventListener('timeupdate', updateTime);
                 audio.removeEventListener('loadedmetadata', updateDuration);
                 audio.removeEventListener('ended', onEnded);
                 audio.removeEventListener('error', onError);
+                audio.removeEventListener('canplay', onCanPlay);
+                audio.removeEventListener('play', onPlay);
+                audio.removeEventListener('pause', onPause);
             };
         }, [currentBook, currentTrackIndex, books]);
 
@@ -602,6 +633,28 @@
                             </div>
 
                         </div>
+                    </div>
+
+                    {/* Debug Panel */}
+                    <div className="border-t border-gray-800 bg-gray-950 px-6 py-4 text-xs text-gray-400 max-h-40 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="uppercase tracking-wide text-gray-500">Diagnostics</span>
+                            <button
+                                className="text-xs text-gray-500 hover:text-gray-300"
+                                onClick={() => setDebugLog([])}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        {debugLog.length === 0 ? (
+                            <div className="text-gray-600">No diagnostics yet. Click a track to capture logs.</div>
+                        ) : (
+                            <ul className="space-y-1 font-mono">
+                                {debugLog.map((line, idx) => (
+                                    <li key={`${line}-${idx}`}>{line}</li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
                 </div>
 
