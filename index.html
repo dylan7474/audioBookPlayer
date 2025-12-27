@@ -232,6 +232,17 @@
 
         // --- Playback Logic ---
 
+        const attemptPlay = (audioElement) => {
+            if (!audioElement) return;
+            const playPromise = audioElement.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(e => {
+                    console.log("Play auto-start prevented", e);
+                    setIsPlaying(false);
+                });
+            }
+        };
+
         const playTrack = (bookName, index) => {
             try {
                 if (!books[bookName] || !books[bookName][index]) return;
@@ -268,10 +279,7 @@
                     }
 
                     audioRef.current.playbackRate = playbackRate;
-                    audioRef.current.play().catch(e => {
-                        console.log("Play auto-start prevented", e);
-                        setIsPlaying(false);
-                    });
+                    attemptPlay(audioRef.current);
                 }
             } catch (err) {
                 console.error("Error playing track:", err);
@@ -358,7 +366,7 @@
         const togglePlay = () => {
             if(!audioRef.current) return;
             if (audioRef.current.paused) {
-                audioRef.current.play();
+                attemptPlay(audioRef.current);
                 setIsPlaying(true);
             } else {
                 audioRef.current.pause();
