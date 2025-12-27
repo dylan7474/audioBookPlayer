@@ -72,7 +72,7 @@
         return h > 0 ? `${h}:${mStr}:${sStr}` : `${mStr}:${sStr}`;
     };
 
-    const APP_VERSION = "1.0.2";
+    const APP_VERSION = "1.0.3";
 
     const App = () => {
         // --- State ---
@@ -113,10 +113,13 @@
                 for (const link of links) {
                     const href = link.getAttribute('href');
                     if (!href || href === '../' || href === './' || href.startsWith('?')) continue;
-                    
-                    // Decode URL encoded characters (e.g. %20 -> space)
+
                     const decodedHref = decodeURIComponent(href);
-                    items.push({ href: decodedHref, fullPath: `${path}/${href}`.replace(/\/\//g, '/') });
+                    items.push({
+                        href: decodedHref,
+                        rawHref: href,
+                        fullPath: `${path}/${href}`.replace(/\/\//g, '/')
+                    });
                 }
                 return items;
             } catch (e) {
@@ -181,7 +184,7 @@
                             .filter(ch => ch.href.toLowerCase().endsWith('.mp3'))
                             .map(ch => ({
                                 name: ch.href,
-                                url: ch.fullPath,
+                                url: encodeURI(ch.fullPath),
                                 size: 0 // Size unknown in server mode without HEAD request, used for unique ID
                             }))
                             .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -196,7 +199,7 @@
                         if (!newBooks['Root Directory']) newBooks['Root Directory'] = [];
                         newBooks['Root Directory'].push({
                             name: item.href,
-                            url: item.fullPath,
+                            url: encodeURI(item.fullPath),
                             size: 0
                         });
                         foundAny = true;
@@ -611,6 +614,14 @@
                             <span className="w-12">{formatTime(duration)}</span>
                         </div>
 
+                        <div className="mb-4">
+                            <audio
+                                ref={audioRef}
+                                controls
+                                className="w-full"
+                            />
+                        </div>
+
                         <div className="flex items-center justify-between">
                             
                             {/* Left: Sleep Timer */}
@@ -695,7 +706,6 @@
                     </div>
                 </div>
 
-                <audio ref={audioRef} />
             </div>
         );
     };
