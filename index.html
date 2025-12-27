@@ -108,7 +108,7 @@
 </div>
 
 <script>
-    const APP_VERSION = "1.0.3";
+    const APP_VERSION = "1.0.4";
 
     const state = {
         books: {},
@@ -119,6 +119,7 @@
         playbackPositions: {},
         currentTrackKey: null,
         lastSavedPosition: 0,
+        autoPlayRequested: false,
         sleepTimerId: null,
         sleepTimerInterval: null,
         sleepTimerEndsAt: null,
@@ -442,6 +443,8 @@
         elements.trackTitle.textContent = track.name;
         elements.bookTitle.textContent = bookName;
 
+        state.autoPlayRequested = !isSameTrack;
+
         if (!isSameTrack) {
             elements.audio.src = track.url;
             appendLog(`Playing ${bookName} / ${track.name}`);
@@ -451,11 +454,12 @@
                 resumeFromSavedPosition();
             }
         }
-
-        elements.audio.play().catch(err => {
-            appendLog(`Playback failed: ${err.message || err}`);
-            setError('Playback failed to start. Please try again.');
-        });
+        if (isSameTrack) {
+            elements.audio.play().catch(err => {
+                appendLog(`Playback failed: ${err.message || err}`);
+                setError('Playback failed to start. Please try again.');
+            });
+        }
     };
 
     elements.scanServer.addEventListener('click', scanServer);
@@ -486,6 +490,13 @@
         elements.duration.textContent = formatTime(elements.audio.duration);
         elements.seekBar.max = elements.audio.duration || 0;
         resumeFromSavedPosition();
+        if (state.autoPlayRequested) {
+            state.autoPlayRequested = false;
+            elements.audio.play().catch(err => {
+                appendLog(`Playback failed: ${err.message || err}`);
+                setError('Playback failed to start. Please try again.');
+            });
+        }
     });
 
     elements.seekBar.addEventListener('input', (event) => {
