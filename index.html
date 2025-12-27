@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Player</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body { background-color: #111827; color: #f3f4f6; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        input[type=range] { accent-color: #3b82f6; }
+    </style>
+</head>
+<body>
+
+<div class="flex h-screen overflow-hidden">
+    <aside class="w-80 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+        <div class="p-4 border-b border-gray-800">
+            <h1 class="text-xl font-bold mb-2 text-blue-400">AudioLibrary</h1>
+            <div class="text-xs text-gray-500 mb-4">Version <span id="app-version"></span></div>
+
+            <div class="flex flex-col gap-2">
+                <button
+                    id="scan-server"
+                    class="flex items-center justify-center w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded transition text-sm font-medium"
+                >
+                    Scan Server (./books)
+                </button>
+
+                <div class="flex items-center gap-2 my-1">
+                    <div class="h-px bg-gray-700 flex-1"></div>
+                    <span class="text-xs text-gray-500">OR</span>
+                    <div class="h-px bg-gray-700 flex-1"></div>
+                </div>
+
+                <label class="flex items-center justify-center w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded cursor-pointer transition select-none text-sm">
+                    Browse Local Folder...
+                    <input id="local-files" type="file" webkitdirectory="true" directory="" multiple class="hidden" />
+                </label>
+            </div>
+        </div>
+
+        <div class="p-2 text-xs text-red-200" id="error-box" hidden></div>
+        <div class="p-2 text-xs text-gray-400" id="loading" hidden>Scanning...</div>
+
+        <div class="flex-1 overflow-y-auto p-2" id="library">
+            <div class="text-gray-500 text-center mt-10 p-4 text-sm" id="empty-state">
+                <p>No books found yet.</p>
+                <p class="mt-2 text-xs opacity-60">
+                    For Server Mode: Ensure a "books" folder exists next to this file and "Directory Listing" is enabled on your server.
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col bg-gray-950 relative overflow-hidden">
+        <section class="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div class="w-48 h-48 bg-gray-800 rounded-lg shadow-2xl flex items-center justify-center mb-6 border border-gray-700">
+                <span class="text-5xl">🎧</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2 max-w-2xl truncate px-4" id="track-title">No Track Selected</h2>
+            <h3 class="text-lg text-gray-400 px-4" id="book-title">Select a book to start</h3>
+            <span class="mt-2 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800/50" id="server-badge" hidden>Server Stream</span>
+        </section>
+
+        <section class="bg-gray-900 border-t border-gray-800 p-6 pb-8">
+            <div class="flex items-center gap-4 mb-4 text-sm text-gray-400 font-mono">
+                <span class="w-12 text-right" id="current-time">00:00</span>
+                <input
+                    id="seek-bar"
+                    type="range"
+                    min="0"
+                    max="0"
+                    value="0"
+                    class="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <span class="w-12" id="duration">00:00</span>
+            </div>
+
+            <div class="mb-4">
+                <audio id="audio-player" controls class="w-full"></audio>
+            </div>
+        </section>
+
+        <section class="border-t border-gray-800 bg-gray-950 px-6 py-4 text-xs text-gray-400 max-h-40 overflow-y-auto">
+            <div class="flex items-center justify-between mb-2">
+                <span class="uppercase tracking-wide text-gray-500">Diagnostics</span>
+                <button id="clear-log" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            <div id="diagnostics-empty" class="text-gray-600">No diagnostics yet. Click a track to capture logs.</div>
+            <ul id="diagnostics-list" class="space-y-1 font-mono"></ul>
+        </section>
+    </main>
+</div>
+
+<script>
+    const APP_VERSION = "1.0.3";
+
+    const state = {
+        books: {},
+        currentBook: null,
+        currentTrackIndex: -1,
+        sourceMode: 'none',
+        log: [],
+    };
+
+    const elements = {
+        appVersion: document.getElementById('app-version'),
+        scanServer: document.getElementById('scan-server'),
+        localFiles: document.getElementById('local-files'),
+        errorBox: document.getElementById('error-box'),
+        loading: document.getElementById('loading'),
+        library: document.getElementById('library'),
+        emptyState: document.getElementById('empty-state'),
+        trackTitle: document.getElementById('track-title'),
+        bookTitle: document.getElementById('book-title'),
+        serverBadge: document.getElementById('server-badge'),
+        audio: document.getElementById('audio-player'),
+        currentTime: document.getElementById('current-time'),
+        duration: document.getElementById('duration'),
+        seekBar: document.getElementById('seek-bar'),
+        diagnosticsList: document.getElementById('diagnostics-list'),
+        diagnosticsEmpty: document.getElementById('diagnostics-empty'),
+        clearLog: document.getElementById('clear-log'),
+    };
+
+    elements.appVersion.textContent = APP_VERSION;
+
+    const formatTime = (seconds) => {
+        if (!seconds || Number.isNaN(seconds)) return "00:00";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const mStr = m.toString().padStart(2, '0');
+        const sStr = s.toString().padStart(2, '0');
+        return h > 0 ? `${h}:${mStr}:${sStr}` : `${mStr}:${sStr}`;
+    };
+
+    const appendLog = (message) => {
+        const timestamp = new Date().toLocaleTimeString();
+        const line = `[${timestamp}] ${message}`;
+        state.log = [...state.log.slice(-99), line];
+        elements.diagnosticsList.innerHTML = state.log.map(entry => `<li>${entry}</li>`).join('');
+        elements.diagnosticsEmpty.hidden = state.log.length > 0;
+        console.log(line);
+    };
+
+    const setError = (message) => {
+        if (!message) {
+            elements.errorBox.hidden = true;
+            elements.errorBox.textContent = "";
+            return;
+        }
+        elements.errorBox.hidden = false;
+        elements.errorBox.textContent = message;
+    };
+
+    const setLoading = (isLoading) => {
+        elements.loading.hidden = !isLoading;
+    };
+
+    const renderLibrary = () => {
+        const bookNames = Object.keys(state.books);
+        elements.library.innerHTML = '';
+        if (bookNames.length === 0) {
+            elements.library.appendChild(elements.emptyState);
+            return;
+        }
+
+        elements.emptyState.remove();
+        bookNames.forEach(bookName => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mb-4';
+
+            const header = document.createElement('h2');
+            header.className = 'text-gray-400 text-sm uppercase font-bold px-2 mb-1 sticky top-0 bg-gray-900 py-1 z-10 border-b border-gray-800/50 flex justify-between';
+            header.innerHTML = `<span class="truncate">${bookName}</span><span class="text-xs opacity-50 font-normal ml-2 mt-0.5">${state.books[bookName].length}</span>`;
+            wrapper.appendChild(header);
+
+            const list = document.createElement('div');
+            list.className = 'space-y-1';
+
+            state.books[bookName].forEach((track, idx) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'w-full text-left px-3 py-2 text-sm rounded truncate flex items-center gap-2 transition hover:bg-gray-800 text-gray-300';
+                button.textContent = track.name;
+                button.addEventListener('click', () => playTrack(bookName, idx));
+                list.appendChild(button);
+            });
+
+            wrapper.appendChild(list);
+            elements.library.appendChild(wrapper);
+        });
+    };
+
+    const parseDirectoryListing = async (path) => {
+        const targetPath = path.endsWith('/') ? path : `${path}/`;
+        const response = await fetch(targetPath);
+        if (!response.ok) throw new Error(`Failed to fetch ${targetPath}`);
+        const text = await response.text();
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/html');
+        const links = Array.from(doc.querySelectorAll('a'));
+
+        return links
+            .map(link => link.getAttribute('href'))
+            .filter(href => href && href !== '../' && href !== './' && !href.startsWith('?'))
+            .map(href => ({
+                href,
+                fullPath: new URL(href, new URL(targetPath, window.location.href)).toString(),
+            }));
+    };
+
+    const scanServer = async () => {
+        setLoading(true);
+        setError(null);
+        state.books = {};
+        appendLog('Scanning server for books...');
+        try {
+            const rootPath = './books/';
+            const topLevelItems = await parseDirectoryListing(rootPath);
+            if (topLevelItems.length === 0) {
+                throw new Error('Could not find any files in ./books. Ensure the folder exists and Directory Listing is enabled.');
+            }
+
+            const newBooks = {};
+            for (const item of topLevelItems) {
+                if (item.href.endsWith('/')) {
+                    const bookName = decodeURIComponent(item.href.replace(/\/$/, ''));
+                    const chapters = await parseDirectoryListing(item.fullPath);
+                    const tracks = chapters
+                        .filter(ch => ch.href.toLowerCase().endsWith('.mp3'))
+                        .map(ch => ({
+                            name: decodeURIComponent(ch.href),
+                            url: ch.fullPath,
+                        }))
+                        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+                    if (tracks.length > 0) {
+                        newBooks[bookName] = tracks;
+                        appendLog(`Found ${tracks.length} tracks in ${bookName}`);
+                    }
+                } else if (item.href.toLowerCase().endsWith('.mp3')) {
+                    if (!newBooks['Root Directory']) newBooks['Root Directory'] = [];
+                    newBooks['Root Directory'].push({
+                        name: decodeURIComponent(item.href),
+                        url: item.fullPath,
+                    });
+                    appendLog(`Found loose track ${decodeURIComponent(item.href)}`);
+                }
+            }
+
+            if (Object.keys(newBooks).length === 0) {
+                throw new Error('Found folders, but no MP3 files inside them.');
+            }
+
+            state.books = newBooks;
+            state.sourceMode = 'server';
+            elements.serverBadge.hidden = false;
+            renderLibrary();
+        } catch (err) {
+            setError(err.message || 'Failed to scan server.');
+            appendLog(`Server scan error: ${err.message || err}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFileSelect = (event) => {
+        setError(null);
+        setLoading(true);
+        try {
+            const files = Array.from(event.target.files || []).filter(file => file.name.toLowerCase().endsWith('.mp3'));
+            if (files.length === 0) {
+                setError('No MP3 files found in the selected folder.');
+                return;
+            }
+
+            const bookMap = {};
+            files.forEach(file => {
+                const parts = file.webkitRelativePath.split('/');
+                const bookName = parts.length > 1 ? parts[parts.length - 2] : 'Root Directory';
+                if (!bookMap[bookName]) bookMap[bookName] = [];
+                bookMap[bookName].push({
+                    name: file.name,
+                    file,
+                    url: URL.createObjectURL(file),
+                });
+            });
+
+            Object.keys(bookMap).forEach(key => {
+                bookMap[key].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            });
+
+            state.books = bookMap;
+            state.sourceMode = 'local';
+            elements.serverBadge.hidden = true;
+            renderLibrary();
+            appendLog(`Loaded local files. Books: ${Object.keys(bookMap).length}`);
+        } catch (err) {
+            setError('Failed to load files.');
+            appendLog(`Local file load error: ${err.message || err}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const playTrack = (bookName, index) => {
+        const tracks = state.books[bookName];
+        if (!tracks || !tracks[index]) return;
+
+        const track = tracks[index];
+        state.currentBook = bookName;
+        state.currentTrackIndex = index;
+
+        elements.trackTitle.textContent = track.name;
+        elements.bookTitle.textContent = bookName;
+        elements.audio.src = track.url;
+        appendLog(`Playing ${bookName} / ${track.name}`);
+
+        elements.audio.play().catch(err => {
+            appendLog(`Playback failed: ${err.message || err}`);
+            setError('Playback failed to start. Please try again.');
+        });
+    };
+
+    elements.scanServer.addEventListener('click', scanServer);
+    elements.localFiles.addEventListener('change', handleFileSelect);
+    elements.clearLog.addEventListener('click', () => {
+        state.log = [];
+        elements.diagnosticsList.innerHTML = '';
+        elements.diagnosticsEmpty.hidden = false;
+    });
+
+    elements.audio.addEventListener('timeupdate', () => {
+        elements.currentTime.textContent = formatTime(elements.audio.currentTime);
+        elements.seekBar.value = elements.audio.currentTime;
+    });
+
+    elements.audio.addEventListener('loadedmetadata', () => {
+        elements.duration.textContent = formatTime(elements.audio.duration);
+        elements.seekBar.max = elements.audio.duration || 0;
+    });
+
+    elements.seekBar.addEventListener('input', (event) => {
+        const nextTime = Number(event.target.value);
+        if (!Number.isNaN(nextTime)) {
+            elements.audio.currentTime = nextTime;
+        }
+    });
+
+    window.addEventListener('error', event => {
+        appendLog(`Window error: ${event.message || 'unknown'}`);
+    });
+
+    window.addEventListener('unhandledrejection', event => {
+        appendLog(`Unhandled rejection: ${event.reason?.message || event.reason || 'unknown'}`);
+    });
+
+    fetch('./books', { method: 'HEAD' })
+        .then(res => { if (res.ok) scanServer(); })
+        .catch(() => {});
+</script>
+</body>
+</html>
