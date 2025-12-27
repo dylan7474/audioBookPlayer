@@ -86,6 +86,14 @@
             <div class="mb-4">
                 <audio id="audio-player" controls class="w-full"></audio>
             </div>
+
+            <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                <span class="uppercase tracking-wide text-gray-500">Sleep Timer</span>
+                <button id="sleep-15" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200">15 min</button>
+                <button id="sleep-30" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200">30 min</button>
+                <button id="sleep-cancel" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200" disabled>Cancel</button>
+                <span id="sleep-status" class="text-gray-500"></span>
+            </div>
         </section>
 
         <section class="border-t border-gray-800 bg-gray-950 px-6 py-4 text-xs text-gray-400 max-h-40 overflow-y-auto">
@@ -108,6 +116,12 @@
         currentTrackIndex: -1,
         sourceMode: 'none',
         log: [],
+        playbackPositions: {},
+        currentTrackKey: null,
+        lastSavedPosition: 0,
+        sleepTimerId: null,
+        sleepTimerInterval: null,
+        sleepTimerEndsAt: null,
     };
 
     const elements = {
@@ -128,9 +142,33 @@
         diagnosticsList: document.getElementById('diagnostics-list'),
         diagnosticsEmpty: document.getElementById('diagnostics-empty'),
         clearLog: document.getElementById('clear-log'),
+        sleep15: document.getElementById('sleep-15'),
+        sleep30: document.getElementById('sleep-30'),
+        sleepCancel: document.getElementById('sleep-cancel'),
+        sleepStatus: document.getElementById('sleep-status'),
     };
 
     elements.appVersion.textContent = APP_VERSION;
+
+    const PLAYBACK_STORAGE_KEY = 'audiobookPlayer.playbackPositions';
+
+    const loadPlaybackPositions = () => {
+        try {
+            const stored = localStorage.getItem(PLAYBACK_STORAGE_KEY);
+            return stored ? JSON.parse(stored) : {};
+        } catch (err) {
+            appendLog(`Failed to load playback positions: ${err.message || err}`);
+            return {};
+        }
+    };
+
+    const savePlaybackPositions = () => {
+        try {
+            localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify(state.playbackPositions));
+        } catch (err) {
+            appendLog(`Failed to save playback positions: ${err.message || err}`);
+        }
+    };
 
     const formatTime = (seconds) => {
         if (!seconds || Number.isNaN(seconds)) return "00:00";
@@ -163,6 +201,68 @@
 
     const setLoading = (isLoading) => {
         elements.loading.hidden = !isLoading;
+    };
+
+    const buildTrackKey = (bookName, track) => {
+        if (state.sourceMode === 'server' && track.url) {
+            return `server:${track.url}`;
+        }
+        if (track.file?.webkitRelativePath) {
+            return `local:${track.file.webkitRelativePath}`;
+        }
+        if (track.file && typeof track.file.size === 'number') {
+            return `local:${bookName}:${track.file.name}:${track.file.size}`;
+        }
+        return `local:${bookName}:${track.name}`;
+    };
+
+    const persistCurrentPlayback = () => {
+        if (!state.currentTrackKey) return;
+        const currentTime = elements.audio.currentTime;
+        if (!Number.isNaN(currentTime)) {
+            state.playbackPositions[state.currentTrackKey] = currentTime;
+            state.lastSavedPosition = currentTime;
+            savePlaybackPositions();
+        }
+    };
+
+    const updateSleepStatus = () => {
+        if (!state.sleepTimerEndsAt) {
+            elements.sleepStatus.textContent = '';
+            return;
+        }
+        const remainingMs = Math.max(0, state.sleepTimerEndsAt - Date.now());
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        elements.sleepStatus.textContent = `Ends in ${formatTime(remainingSeconds)}`;
+    };
+
+    const clearSleepTimer = () => {
+        if (state.sleepTimerId) {
+            clearTimeout(state.sleepTimerId);
+        }
+        if (state.sleepTimerInterval) {
+            clearInterval(state.sleepTimerInterval);
+        }
+        state.sleepTimerId = null;
+        state.sleepTimerInterval = null;
+        state.sleepTimerEndsAt = null;
+        elements.sleepCancel.disabled = true;
+        updateSleepStatus();
+    };
+
+    const setSleepTimer = (minutes) => {
+        clearSleepTimer();
+        const durationMs = minutes * 60 * 1000;
+        state.sleepTimerEndsAt = Date.now() + durationMs;
+        elements.sleepCancel.disabled = false;
+        updateSleepStatus();
+        state.sleepTimerInterval = setInterval(updateSleepStatus, 1000);
+        state.sleepTimerId = setTimeout(() => {
+            elements.audio.pause();
+            appendLog(`Sleep timer ended after ${minutes} minutes.`);
+            clearSleepTimer();
+        }, durationMs);
+        appendLog(`Sleep timer set for ${minutes} minutes.`);
     };
 
     const renderLibrary = () => {
@@ -317,9 +417,13 @@
         const tracks = state.books[bookName];
         if (!tracks || !tracks[index]) return;
 
+        persistCurrentPlayback();
+
         const track = tracks[index];
         state.currentBook = bookName;
         state.currentTrackIndex = index;
+        state.currentTrackKey = buildTrackKey(bookName, track);
+        state.lastSavedPosition = state.playbackPositions[state.currentTrackKey] || 0;
 
         elements.trackTitle.textContent = track.name;
         elements.bookTitle.textContent = bookName;
@@ -334,6 +438,9 @@
 
     elements.scanServer.addEventListener('click', scanServer);
     elements.localFiles.addEventListener('change', handleFileSelect);
+    elements.sleep15.addEventListener('click', () => setSleepTimer(15));
+    elements.sleep30.addEventListener('click', () => setSleepTimer(30));
+    elements.sleepCancel.addEventListener('click', clearSleepTimer);
     elements.clearLog.addEventListener('click', () => {
         state.log = [];
         elements.diagnosticsList.innerHTML = '';
@@ -343,17 +450,44 @@
     elements.audio.addEventListener('timeupdate', () => {
         elements.currentTime.textContent = formatTime(elements.audio.currentTime);
         elements.seekBar.value = elements.audio.currentTime;
+        if (state.currentTrackKey) {
+            const currentTime = elements.audio.currentTime;
+            if (Math.abs(currentTime - state.lastSavedPosition) >= 5) {
+                state.playbackPositions[state.currentTrackKey] = currentTime;
+                state.lastSavedPosition = currentTime;
+                savePlaybackPositions();
+            }
+        }
     });
 
     elements.audio.addEventListener('loadedmetadata', () => {
         elements.duration.textContent = formatTime(elements.audio.duration);
         elements.seekBar.max = elements.audio.duration || 0;
+        if (state.currentTrackKey) {
+            const savedPosition = state.playbackPositions[state.currentTrackKey];
+            if (savedPosition && savedPosition < elements.audio.duration - 1) {
+                elements.audio.currentTime = savedPosition;
+                elements.seekBar.value = savedPosition;
+                elements.currentTime.textContent = formatTime(savedPosition);
+                appendLog(`Resuming at ${formatTime(savedPosition)}.`);
+            }
+        }
     });
 
     elements.seekBar.addEventListener('input', (event) => {
         const nextTime = Number(event.target.value);
         if (!Number.isNaN(nextTime)) {
             elements.audio.currentTime = nextTime;
+        }
+    });
+
+    elements.audio.addEventListener('pause', persistCurrentPlayback);
+
+    elements.audio.addEventListener('ended', () => {
+        if (state.currentTrackKey) {
+            state.playbackPositions[state.currentTrackKey] = 0;
+            state.lastSavedPosition = 0;
+            savePlaybackPositions();
         }
     });
 
@@ -364,6 +498,8 @@
     window.addEventListener('unhandledrejection', event => {
         appendLog(`Unhandled rejection: ${event.reason?.message || event.reason || 'unknown'}`);
     });
+
+    state.playbackPositions = loadPlaybackPositions();
 
     fetch('./books', { method: 'HEAD' })
         .then(res => { if (res.ok) scanServer(); })
