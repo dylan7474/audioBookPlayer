@@ -16,8 +16,8 @@ directory next to it.
 - **Browse Local Folder:** Select a local directory of MP3s to play in-browser.
 - **Playback:** Use the Player screen controls, or drag the seek bar to jump to a timestamp.
 - **Sleep Timer:** Use the 15/30 minute buttons on the Player screen to pause playback automatically.
-- **Server Sync (optional):** When `/api/bookmarks` is available, playback positions are merged, local playback storage is cleared, and positions are synced across devices. A device id is stored under `audiobookPlayer.deviceId`.
-- **Sync ID (optional):** Append `?user=your-id` to the URL (or use the Settings panel) to reuse the same server bookmarks across devices or incognito windows.
+- **Server Sync (optional):** When `/api/bookmarks` is available, playback positions are merged, local playback storage is cleared, and positions are synced across devices.
+- **Sync ID (optional):** By default, the app uses a shared sync id derived from the site URL. Append `?user=your-id` (or use the Settings panel) to override it across multiple hosts or incognito windows.
 - **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
 ## Hosting on Debian with lighttpd
