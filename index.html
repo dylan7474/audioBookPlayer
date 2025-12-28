@@ -125,7 +125,8 @@
             <div class="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 sm:p-5 space-y-2 text-sm text-gray-400">
                 <h2 class="text-sm uppercase tracking-wide text-gray-500">About</h2>
                 <p>Your playback position is saved on this device so you can resume where you left off.</p>
-                <p>If server sync is enabled, positions are shared across devices.</p>
+                <p>If server sync is enabled, positions are stored on the server and shared across devices.</p>
+                <p class="text-xs text-gray-500">Local playback storage is cleared once server sync activates.</p>
                 <p>Use the Library screen to scan a server or browse local folders.</p>
             </div>
         </section>
@@ -177,6 +178,7 @@
         activeScreen: 'library',
         serverSyncAvailable: false,
         serverSyncTimer: null,
+        persistLocally: true,
     };
 
     const elements = {
@@ -223,6 +225,7 @@
     };
 
     const loadPlaybackPositions = () => {
+        if (!state.persistLocally) return {};
         try {
             const stored = localStorage.getItem(PLAYBACK_STORAGE_KEY);
             return stored ? JSON.parse(stored) : {};
@@ -233,11 +236,22 @@
     };
 
     const savePlaybackPositions = () => {
+        if (state.persistLocally) {
+            try {
+                localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify(state.playbackPositions));
+            } catch (err) {
+                appendLog(`Failed to save playback positions: ${err.message || err}`);
+            }
+        }
+        scheduleServerSync();
+    };
+
+    const disableLocalPlaybackStorage = () => {
+        state.persistLocally = false;
         try {
-            localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify(state.playbackPositions));
-            scheduleServerSync();
+            localStorage.removeItem(PLAYBACK_STORAGE_KEY);
         } catch (err) {
-            appendLog(`Failed to save playback positions: ${err.message || err}`);
+            appendLog(`Failed to clear local playback storage: ${err.message || err}`);
         }
     };
 
@@ -292,6 +306,10 @@
             const remotePositions = payload.playbackPositions || {};
             state.playbackPositions = mergePlaybackPositions(state.playbackPositions, remotePositions);
             state.serverSyncAvailable = true;
+            if (state.persistLocally) {
+                disableLocalPlaybackStorage();
+                appendLog('Server sync active. Local playback storage cleared.');
+            }
             savePlaybackPositions();
             appendLog('Loaded playback positions from server.');
         } catch (err) {
