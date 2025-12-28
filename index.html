@@ -174,7 +174,7 @@
 </div>
 
 <script>
-    const APP_VERSION = "1.1.1";
+    const APP_VERSION = "1.1.2";
 
     const state = {
         books: {},
@@ -317,6 +317,13 @@
         return merged;
     };
 
+    const describePlaybackPositions = (positions) => {
+        const entries = Object.entries(positions || {}).filter(([, value]) => typeof value === 'number');
+        const count = entries.length;
+        const sample = entries.slice(0, 3).map(([key, value]) => `${key}=${formatTime(value)}`).join(', ');
+        return `${count} position${count === 1 ? '' : 's'}${sample ? ` (sample: ${sample})` : ''}`;
+    };
+
     const updateSyncUserUi = () => {
         if (!elements.syncUserInput) return;
         elements.syncUserInput.value = state.userId || '';
@@ -362,6 +369,7 @@
     const syncPlaybackPositionsToServer = async () => {
         if (!state.serverSyncAvailable) return;
         const deviceId = state.userId;
+        appendLog(`Syncing ${describePlaybackPositions(state.playbackPositions)} to server for id "${deviceId}".`);
         try {
             const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`, {
                 method: 'POST',
@@ -371,7 +379,7 @@
             if (!response.ok) {
                 throw new Error(`Sync failed (${response.status})`);
             }
-            appendLog('Synced playback positions to server.');
+            appendLog(`Synced playback positions to server (status ${response.status}).`);
         } catch (err) {
             appendLog(`Server sync error: ${err.message || err}`);
         }
@@ -391,6 +399,7 @@
     const hydratePlaybackPositionsFromServer = async () => {
         if (!window.location.protocol.startsWith('http')) return;
         const deviceId = state.userId;
+        appendLog(`Fetching server bookmarks for id "${deviceId}".`);
         try {
             const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`);
             if (!response.ok) {
@@ -405,7 +414,7 @@
                 appendLog('Server sync active. Local playback storage cleared.');
             }
             savePlaybackPositions();
-            appendLog('Loaded playback positions from server.');
+            appendLog(`Loaded ${describePlaybackPositions(remotePositions)} from server.`);
         } catch (err) {
             appendLog(`Server sync unavailable: ${err.message || err}`);
         }
