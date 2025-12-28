@@ -20,46 +20,107 @@ directory next to it.
 - **Sync ID (optional):** By default, the app uses a shared sync id derived from the site URL. Append `?user=your-id` (or use the Settings panel) to override it across multiple hosts or incognito windows.
 - **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
-## Hosting on Debian with lighttpd
+## Server Deployment Guide (Debian + Lighttpd + Node.js)
 
-Enable directory listing so the player can scan `./books`:
+This guide describes how to host the player on a clean Debian server. This setup serves the
+frontend via **Lighttpd** and runs the backend API via **Node.js** (managed by systemd).
+
+### 1. Install Requirements
+
+Update your system and install the web server, git, and node runtime.
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y lighttpd nodejs npm git
+```
+
+### 2. Configure Lighttpd
+
+Enable directory listing (for scanning books) and the proxy module (for the API).
 
 ```bash
 sudo lighty-enable-mod dir-listing
+sudo lighty-enable-mod proxy
+```
+
+Create a proxy configuration to forward API requests to the backend. We use port 3002 to avoid
+conflicts with other services (like Gitea).
+
+Edit `/etc/lighttpd/conf-available/10-proxy.conf`:
+
+```conf
+# Forward /api requests to the Node.js backend on port 3002
+$HTTP["url"] =~ "^/api/" {
+    proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => 3002 ) ) )
+}
+```
+
+Enable the configuration:
+
+```bash
+sudo ln -s /etc/lighttpd/conf-available/10-proxy.conf /etc/lighttpd/conf-enabled/
+```
+
+### 3. Deploy Application Files
+
+Clone the repository directly into the web root and set up the directory structure.
+
+```bash
+cd /var/www/html
+sudo rm index.lighttpd.html
+# Clone the repo (replace with your repo URL)
+sudo git clone https://github.com/dylan7474/audioBookPlayer.git .
+
+# Create required directories for content and data
+sudo mkdir books
+sudo mkdir data
+
+# Set permissions so the web server can read books and write data
+sudo chown -R www-data:www-data /var/www/html
+```
+
+### 4. Create Backend Service (Systemd)
+
+Set up the Node.js server to run automatically in the background using port 3002.
+
+Create `/etc/systemd/system/audiobook-backend.service`:
+
+```ini
+[Unit]
+Description=AudioBook Player Backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/html
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+# Use port 3002 to avoid conflicts
+Environment=PORT=3002
+Environment=DATA_DIR=/var/www/html/data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 5. Start Services
+
+Reload systemd, start the backend, and restart the web server.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now audiobook-backend
 sudo systemctl force-reload lighttpd
 ```
 
-Place your audiobook folders inside a `books/` directory next to `index.html`.
+### 6. Verify Installation
 
-## Server-side bookmark sync (lighttpd + Node)
+Access the Player: `http://<YOUR_SERVER_IP>/`
 
-The optional server-side sync keeps playback positions in sync across devices by proxying
-`/api/bookmarks` to a local Node server.
+Add Books: Copy your audiobook folders (containing `.mp3s`) into `/var/www/html/books/`.
 
-1. Install Node.js on Debian:
-
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y nodejs
-   ```
-
-2. Start the API server (listens on localhost only):
-
-   ```bash
-   node server.js
-   ```
-
-3. Enable proxying in lighttpd (example config):
-
-   ```conf
-   server.modules += ( "mod_proxy" )
-
-   $HTTP["url"] =~ "^/api/" {
-       proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )
-   }
-   ```
-
-4. Restart lighttpd and load the site. The client will automatically sync when the endpoint is available.
+Check Sync: Open browser logs (F12) to ensure the client connects to `/api/bookmarks`.
 
 The server persists bookmark data at `data/bookmarks.json` (override with `DATA_FILE`).
 
