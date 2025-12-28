@@ -15,7 +15,7 @@ directory next to it.
 - **Scan Server (./books):** Load MP3s from a `books/` directory served by your web server.
 - **Browse Local Folder:** Select a local directory of MP3s to play in-browser.
 - **Playback:** Use the Player screen controls, or drag the seek bar to jump to a timestamp.
-- **Sleep Timer:** Use the 15/30 minute buttons in Settings to pause playback automatically.
+- **Sleep Timer:** Use the 15/30 minute buttons on the Player screen to pause playback automatically.
 - **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
 ## Hosting on Debian with lighttpd
