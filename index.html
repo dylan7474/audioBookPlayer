@@ -77,7 +77,7 @@
             </div>
         </section>
 
-        <section id="screen-player" class="screen-panel hidden px-4 sm:px-6 py-6 space-y-6" data-screen-panel="player">
+        <section id="screen-player" class="screen-panel px-4 sm:px-6 py-6 space-y-6" data-screen-panel="player" hidden>
             <div class="rounded-3xl bg-gray-900/70 border border-gray-800 p-5 sm:p-6 flex flex-col items-center text-center gap-4">
                 <div class="w-28 h-28 sm:w-40 sm:h-40 bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center border border-gray-700">
                     <span class="text-4xl sm:text-5xl">🎧</span>
@@ -116,7 +116,7 @@
             </section>
         </section>
 
-        <section id="screen-settings" class="screen-panel hidden px-4 sm:px-6 py-6 space-y-5" data-screen-panel="settings">
+        <section id="screen-settings" class="screen-panel px-4 sm:px-6 py-6 space-y-5" data-screen-panel="settings" hidden>
             <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 space-y-3">
                 <h2 class="text-sm uppercase tracking-wide text-gray-500">Playback &amp; Sleep</h2>
                 <p class="text-sm text-gray-400">Control sleep timers and playback habits from here.</p>
@@ -129,7 +129,7 @@
             </div>
         </section>
 
-        <section id="screen-logs" class="screen-panel hidden px-4 sm:px-6 py-6" data-screen-panel="logs">
+        <section id="screen-logs" class="screen-panel px-4 sm:px-6 py-6" data-screen-panel="logs" hidden>
             <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 text-xs text-gray-400">
                 <div class="flex items-center justify-between mb-3">
                     <span class="uppercase tracking-wide text-gray-500">Diagnostics</span>
@@ -253,7 +253,9 @@
     const setActiveScreen = (screen) => {
         state.activeScreen = screen;
         elements.screenPanels.forEach(panel => {
-            panel.hidden = panel.dataset.screenPanel !== screen;
+            const shouldShow = panel.dataset.screenPanel === screen;
+            panel.hidden = !shouldShow;
+            panel.classList.toggle('hidden', !shouldShow);
         });
         elements.screenButtons.forEach(button => {
             const isActive = button.dataset.screen === screen;
