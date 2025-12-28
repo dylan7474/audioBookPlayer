@@ -11,11 +11,12 @@ directory next to it.
 
 ## Basic Controls
 
+- **Navigation Tabs:** Use Library, Player, Settings, and Logs to move between app screens.
 - **Scan Server (./books):** Load MP3s from a `books/` directory served by your web server.
 - **Browse Local Folder:** Select a local directory of MP3s to play in-browser.
-- **Playback:** Use the native audio controls, or drag the seek bar to jump to a timestamp.
-- **Sleep Timer:** Use the 15/30 minute buttons to pause playback automatically.
-- **Diagnostics:** Toggle logs to see scan/playback events and clear as needed.
+- **Playback:** Use the Player screen controls, or drag the seek bar to jump to a timestamp.
+- **Sleep Timer:** Use the 15/30 minute buttons in Settings to pause playback automatically.
+- **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
 ## Hosting on Debian with lighttpd
 

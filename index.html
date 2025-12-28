@@ -19,97 +19,137 @@
 </head>
 <body>
 
-<div class="flex h-screen overflow-hidden flex-col lg:flex-row">
-    <aside class="w-full lg:w-80 bg-gray-900 border-b lg:border-b-0 lg:border-r border-gray-800 flex flex-col shrink-0 max-h-[45vh] sm:max-h-[50vh] lg:max-h-none">
-        <div class="p-4 border-b border-gray-800">
-            <h1 class="text-lg sm:text-xl font-bold mb-2 text-blue-400">AudioLibrary</h1>
-            <div class="text-xs text-gray-500 mb-4">Version <span id="app-version"></span></div>
+<div class="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
+    <header class="px-4 sm:px-6 py-4 border-b border-gray-800 bg-gray-950/95 backdrop-blur">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h1 class="text-lg sm:text-xl font-bold text-blue-400">AudioLibrary</h1>
+                <div class="text-xs text-gray-500">Version <span id="app-version"></span></div>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="uppercase tracking-wide text-gray-500">Source</span>
+                <span class="px-2 py-1 rounded-full border border-gray-800 bg-gray-900/80">Local</span>
+                <span class="px-2 py-1 rounded-full border border-emerald-800/60 bg-emerald-900/40 text-emerald-300" id="server-badge" hidden>Server Stream</span>
+            </div>
+        </div>
+        <nav class="mt-4 hidden sm:flex items-center gap-2">
+            <button class="screen-tab px-4 py-2 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium" data-screen="library" aria-pressed="false">Library</button>
+            <button class="screen-tab px-4 py-2 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium" data-screen="player" aria-pressed="false">Player</button>
+            <button class="screen-tab px-4 py-2 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium" data-screen="settings" aria-pressed="false">Settings</button>
+            <button class="screen-tab px-4 py-2 rounded-lg bg-gray-800 text-gray-300 text-sm font-medium" data-screen="logs" aria-pressed="false">Logs</button>
+        </nav>
+    </header>
 
-            <div class="flex flex-col gap-2">
-                <button
-                    id="scan-server"
-                    class="flex items-center justify-center w-full px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded transition text-sm font-medium"
-                >
-                    Scan Server (./books)
-                </button>
+    <main class="flex-1 overflow-y-auto pb-20 sm:pb-6">
+        <section id="screen-library" class="screen-panel px-4 sm:px-6 py-6 space-y-5" data-screen-panel="library">
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 space-y-4">
+                <div class="flex flex-col gap-2">
+                    <button
+                        id="scan-server"
+                        class="flex items-center justify-center w-full px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl transition text-sm font-semibold"
+                    >
+                        Scan Server (./books)
+                    </button>
 
-                <div class="flex items-center gap-2 my-1">
-                    <div class="h-px bg-gray-700 flex-1"></div>
-                    <span class="text-xs text-gray-500">OR</span>
-                    <div class="h-px bg-gray-700 flex-1"></div>
+                    <div class="flex items-center gap-2 my-1">
+                        <div class="h-px bg-gray-700 flex-1"></div>
+                        <span class="text-xs text-gray-500">OR</span>
+                        <div class="h-px bg-gray-700 flex-1"></div>
+                    </div>
+
+                    <label class="flex items-center justify-center w-full px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl cursor-pointer transition select-none text-sm font-semibold">
+                        Browse Local Folder...
+                        <input id="local-files" type="file" webkitdirectory="true" directory="" multiple class="hidden" />
+                    </label>
                 </div>
-
-                <label class="flex items-center justify-center w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded cursor-pointer transition select-none text-sm">
-                    Browse Local Folder...
-                    <input id="local-files" type="file" webkitdirectory="true" directory="" multiple class="hidden" />
-                </label>
-            </div>
-        </div>
-
-        <div class="p-2 text-xs text-red-200" id="error-box" hidden></div>
-        <div class="p-2 text-xs text-gray-400" id="loading" hidden>Scanning...</div>
-
-        <div class="flex-1 overflow-y-auto p-2" id="library">
-            <div class="text-gray-500 text-center mt-10 p-4 text-sm" id="empty-state">
-                <p>No books found yet.</p>
-                <p class="mt-2 text-xs opacity-60">
-                    For Server Mode: Ensure a "books" folder exists next to this file and "Directory Listing" is enabled on your server.
-                </p>
-            </div>
-        </div>
-    </aside>
-
-    <main class="flex-1 flex flex-col bg-gray-950 relative overflow-y-auto lg:overflow-hidden min-h-0">
-        <section class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 text-center">
-            <div class="w-28 h-28 sm:w-40 sm:h-40 lg:w-48 lg:h-48 bg-gray-800 rounded-lg shadow-2xl flex items-center justify-center mb-4 sm:mb-6 border border-gray-700">
-                <span class="text-4xl sm:text-5xl">🎧</span>
-            </div>
-            <h2 class="text-lg sm:text-2xl font-bold text-white mb-2 max-w-2xl truncate px-4" id="track-title">No Track Selected</h2>
-            <h3 class="text-sm sm:text-lg text-gray-400 px-4" id="book-title">Select a book to start</h3>
-            <span class="mt-2 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800/50" id="server-badge" hidden>Server Stream</span>
-        </section>
-
-        <section class="bg-gray-900 border-t border-gray-800 p-4 sm:p-6 pb-6 sm:pb-8">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-4 text-sm text-gray-400 font-mono">
-                <span class="w-12 text-right" id="current-time">00:00</span>
-                <input
-                    id="seek-bar"
-                    type="range"
-                    min="0"
-                    max="0"
-                    value="0"
-                    class="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                />
-                <span class="w-12" id="duration">00:00</span>
             </div>
 
-            <div class="mb-4">
-                <audio id="audio-player" controls class="w-full"></audio>
-            </div>
+            <div class="p-2 text-xs text-red-200" id="error-box" hidden></div>
+            <div class="p-2 text-xs text-gray-400" id="loading" hidden>Scanning...</div>
 
-            <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                <span class="uppercase tracking-wide text-gray-500">Sleep Timer</span>
-                <button id="sleep-15" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200">15 min</button>
-                <button id="sleep-30" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200">30 min</button>
-                <button id="sleep-cancel" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200" disabled>Cancel</button>
-                <span id="sleep-status" class="text-gray-500"></span>
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/40 p-2" id="library">
+                <div class="text-gray-500 text-center mt-6 p-4 text-sm" id="empty-state">
+                    <p>No books found yet.</p>
+                    <p class="mt-2 text-xs opacity-60">
+                        For Server Mode: Ensure a "books" folder exists next to this file and "Directory Listing" is enabled on your server.
+                    </p>
+                </div>
             </div>
         </section>
 
-        <section class="border-t border-gray-800 bg-gray-950 px-4 sm:px-6 py-4 text-xs text-gray-400">
-            <div class="flex items-center justify-between mb-2">
-                <span class="uppercase tracking-wide text-gray-500">Diagnostics</span>
-                <div class="flex items-center gap-3">
-                    <button id="toggle-logs" class="text-xs text-gray-500 hover:text-gray-300">Show Logs</button>
-                    <button id="clear-log" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+        <section id="screen-player" class="screen-panel hidden px-4 sm:px-6 py-6 space-y-6" data-screen-panel="player">
+            <div class="rounded-3xl bg-gray-900/70 border border-gray-800 p-5 sm:p-6 flex flex-col items-center text-center gap-4">
+                <div class="w-28 h-28 sm:w-40 sm:h-40 bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center border border-gray-700">
+                    <span class="text-4xl sm:text-5xl">🎧</span>
+                </div>
+                <div>
+                    <h2 class="text-lg sm:text-2xl font-bold text-white mb-2 max-w-2xl truncate px-4" id="track-title">No Track Selected</h2>
+                    <h3 class="text-sm sm:text-lg text-gray-400 px-4" id="book-title">Select a book to start</h3>
                 </div>
             </div>
-            <div id="diagnostics-content" class="max-h-40 overflow-y-auto" hidden>
-                <div id="diagnostics-empty" class="text-gray-600">No diagnostics yet. Click a track to capture logs.</div>
-                <ul id="diagnostics-list" class="space-y-1 font-mono"></ul>
+
+            <section class="rounded-3xl bg-gray-900 border border-gray-800 p-4 sm:p-6 pb-6 sm:pb-8 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-400 font-mono">
+                    <span class="w-12 text-right" id="current-time">00:00</span>
+                    <input
+                        id="seek-bar"
+                        type="range"
+                        min="0"
+                        max="0"
+                        value="0"
+                        class="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span class="w-12" id="duration">00:00</span>
+                </div>
+
+                <div>
+                    <audio id="audio-player" controls class="w-full"></audio>
+                </div>
+            </section>
+        </section>
+
+        <section id="screen-settings" class="screen-panel hidden px-4 sm:px-6 py-6 space-y-5" data-screen-panel="settings">
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 space-y-3">
+                <h2 class="text-sm uppercase tracking-wide text-gray-500">Playback &amp; Sleep</h2>
+                <p class="text-sm text-gray-400">Control sleep timers and playback habits from here.</p>
+                <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                    <span class="uppercase tracking-wide text-gray-500">Sleep Timer</span>
+                    <button id="sleep-15" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200">15 min</button>
+                    <button id="sleep-30" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200">30 min</button>
+                    <button id="sleep-cancel" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200" disabled>Cancel</button>
+                    <span id="sleep-status" class="text-gray-500"></span>
+                </div>
+            </div>
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 sm:p-5 space-y-2 text-sm text-gray-400">
+                <h2 class="text-sm uppercase tracking-wide text-gray-500">About</h2>
+                <p>Your playback position is saved on this device so you can resume where you left off.</p>
+                <p>Use the Library screen to scan a server or browse local folders.</p>
+            </div>
+        </section>
+
+        <section id="screen-logs" class="screen-panel hidden px-4 sm:px-6 py-6" data-screen-panel="logs">
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 text-xs text-gray-400">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="uppercase tracking-wide text-gray-500">Diagnostics</span>
+                    <div class="flex items-center gap-3">
+                        <button id="toggle-logs" class="text-xs text-gray-500 hover:text-gray-300">Hide Logs</button>
+                        <button id="clear-log" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+                    </div>
+                </div>
+                <div id="diagnostics-content" class="max-h-60 overflow-y-auto">
+                    <div id="diagnostics-empty" class="text-gray-600">No diagnostics yet. Click a track to capture logs.</div>
+                    <ul id="diagnostics-list" class="space-y-1 font-mono"></ul>
+                </div>
             </div>
         </section>
     </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-gray-950/95 border-t border-gray-800 px-4 py-3 flex items-center justify-between gap-2 text-xs sm:hidden">
+        <button class="screen-tab flex-1 py-2 rounded-xl bg-gray-800 text-gray-300 font-semibold" data-screen="library" aria-pressed="false">Library</button>
+        <button class="screen-tab flex-1 py-2 rounded-xl bg-gray-800 text-gray-300 font-semibold" data-screen="player" aria-pressed="false">Player</button>
+        <button class="screen-tab flex-1 py-2 rounded-xl bg-gray-800 text-gray-300 font-semibold" data-screen="settings" aria-pressed="false">Settings</button>
+        <button class="screen-tab flex-1 py-2 rounded-xl bg-gray-800 text-gray-300 font-semibold" data-screen="logs" aria-pressed="false">Logs</button>
+    </nav>
 </div>
 
 <script>
@@ -130,7 +170,8 @@
         sleepTimerId: null,
         sleepTimerInterval: null,
         sleepTimerEndsAt: null,
-        logsVisible: false,
+        logsVisible: true,
+        activeScreen: 'library',
     };
 
     const elements = {
@@ -157,6 +198,8 @@
         sleep30: document.getElementById('sleep-30'),
         sleepCancel: document.getElementById('sleep-cancel'),
         sleepStatus: document.getElementById('sleep-status'),
+        screenButtons: document.querySelectorAll('.screen-tab'),
+        screenPanels: document.querySelectorAll('.screen-panel'),
     };
 
     elements.appVersion.textContent = APP_VERSION;
@@ -203,6 +246,21 @@
     const updateDiagnosticsVisibility = () => {
         elements.diagnosticsContent.hidden = !state.logsVisible;
         elements.toggleLogs.textContent = state.logsVisible ? 'Hide Logs' : 'Show Logs';
+    };
+
+    const setActiveScreen = (screen) => {
+        state.activeScreen = screen;
+        elements.screenPanels.forEach(panel => {
+            panel.hidden = panel.dataset.screenPanel !== screen;
+        });
+        elements.screenButtons.forEach(button => {
+            const isActive = button.dataset.screen === screen;
+            button.classList.toggle('bg-blue-600', isActive);
+            button.classList.toggle('text-white', isActive);
+            button.classList.toggle('bg-gray-800', !isActive);
+            button.classList.toggle('text-gray-300', !isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
     };
 
     const setError = (message) => {
@@ -493,6 +551,7 @@
                 applyResumeAndMaybePlay();
             }
         }
+        setActiveScreen('player');
     };
 
     elements.scanServer.addEventListener('click', scanServer);
@@ -508,6 +567,11 @@
     elements.toggleLogs.addEventListener('click', () => {
         state.logsVisible = !state.logsVisible;
         updateDiagnosticsVisibility();
+    });
+    elements.screenButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            setActiveScreen(button.dataset.screen);
+        });
     });
 
     elements.audio.addEventListener('timeupdate', () => {
@@ -559,6 +623,7 @@
 
     state.playbackPositions = loadPlaybackPositions();
     updateDiagnosticsVisibility();
+    setActiveScreen(state.activeScreen);
 
     fetch('./books', { method: 'HEAD' })
         .then(res => { if (res.ok) scanServer(); })
