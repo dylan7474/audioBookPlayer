@@ -17,6 +17,7 @@ directory next to it.
 - **Playback:** Use the Player screen controls, or drag the seek bar to jump to a timestamp.
 - **Sleep Timer:** Use the 15/30 minute buttons on the Player screen to pause playback automatically.
 - **Server Sync (optional):** When `/api/bookmarks` is available, playback positions are merged, local playback storage is cleared, and positions are synced across devices. A device id is stored under `audiobookPlayer.deviceId`.
+- **Sync ID (optional):** Append `?user=your-id` to the URL (or use the Settings panel) to reuse the same server bookmarks across devices or incognito windows.
 - **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
 ## Hosting on Debian with lighttpd

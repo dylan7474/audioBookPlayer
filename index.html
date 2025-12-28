@@ -122,6 +122,23 @@
                 <p class="text-sm text-gray-400">Control sleep timers and playback habits from here.</p>
                 <p class="text-xs text-gray-500">Sleep timer controls now live on the Player screen.</p>
             </div>
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 sm:p-5 space-y-3">
+                <h2 class="text-sm uppercase tracking-wide text-gray-500">Server Sync ID</h2>
+                <p class="text-sm text-gray-400">Use a shared ID to resume across devices or incognito sessions.</p>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <input
+                        id="sync-user-input"
+                        type="text"
+                        placeholder="sync-id"
+                        class="flex-1 rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 text-sm text-gray-100"
+                    />
+                    <div class="flex items-center gap-2">
+                        <button id="sync-user-apply" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold">Apply</button>
+                        <button id="sync-user-copy" class="px-3 py-2 rounded-lg bg-gray-800 text-gray-200 text-sm font-semibold">Copy Link</button>
+                    </div>
+                </div>
+                <p id="sync-user-hint" class="text-xs text-gray-500"></p>
+            </div>
             <div class="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 sm:p-5 space-y-2 text-sm text-gray-400">
                 <h2 class="text-sm uppercase tracking-wide text-gray-500">About</h2>
                 <p>Your playback position is saved on this device so you can resume where you left off.</p>
@@ -157,7 +174,7 @@
 </div>
 
 <script>
-    const APP_VERSION = "1.1.0";
+    const APP_VERSION = "1.1.1";
 
     const state = {
         books: {},
@@ -179,6 +196,8 @@
         serverSyncAvailable: false,
         serverSyncTimer: null,
         persistLocally: true,
+        userId: null,
+        userIdSource: 'local',
     };
 
     const elements = {
@@ -205,6 +224,10 @@
         sleep30: document.getElementById('sleep-30'),
         sleepCancel: document.getElementById('sleep-cancel'),
         sleepStatus: document.getElementById('sleep-status'),
+        syncUserInput: document.getElementById('sync-user-input'),
+        syncUserApply: document.getElementById('sync-user-apply'),
+        syncUserCopy: document.getElementById('sync-user-copy'),
+        syncUserHint: document.getElementById('sync-user-hint'),
         screenButtons: document.querySelectorAll('.screen-tab'),
         screenPanels: document.querySelectorAll('.screen-panel'),
     };
@@ -216,12 +239,41 @@
     const SERVER_SYNC_DEBOUNCE_MS = 1200;
     const BOOKMARKS_ENDPOINT = './api/bookmarks';
 
-    const getDeviceId = () => {
+    const readUserIdFromUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        const urlUser = params.get('user');
+        if (!urlUser) return null;
+        const trimmed = urlUser.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const setUserId = (userId, source, persistLocal) => {
+        state.userId = userId;
+        state.userIdSource = source;
+        if (persistLocal) {
+            try {
+                localStorage.setItem(DEVICE_ID_STORAGE_KEY, userId);
+            } catch (err) {
+                appendLog(`Failed to store sync id locally: ${err.message || err}`);
+            }
+        }
+        updateSyncUserUi();
+    };
+
+    const initializeUserId = () => {
+        const urlUser = readUserIdFromUrl();
+        if (urlUser) {
+            setUserId(urlUser, 'url', false);
+            appendLog('Using sync id from URL.');
+            return;
+        }
         const stored = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-        if (stored) return stored;
+        if (stored) {
+            setUserId(stored, 'local', false);
+            return;
+        }
         const generated = (crypto?.randomUUID && crypto.randomUUID()) || `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated);
-        return generated;
+        setUserId(generated, 'local', true);
     };
 
     const loadPlaybackPositions = () => {
@@ -265,9 +317,51 @@
         return merged;
     };
 
+    const updateSyncUserUi = () => {
+        if (!elements.syncUserInput) return;
+        elements.syncUserInput.value = state.userId || '';
+        if (state.userIdSource === 'url') {
+            elements.syncUserHint.textContent = 'Using sync id from the URL (?user=...).';
+        } else {
+            elements.syncUserHint.textContent = 'Stored locally unless you provide a URL sync id.';
+        }
+    };
+
+    const buildSyncUrl = (userId) => {
+        const url = new URL(window.location.href);
+        if (userId) {
+            url.searchParams.set('user', userId);
+        } else {
+            url.searchParams.delete('user');
+        }
+        return url.toString();
+    };
+
+    const applySyncUser = () => {
+        const nextId = elements.syncUserInput.value.trim();
+        if (!nextId) {
+            elements.syncUserHint.textContent = 'Enter a sync id to apply.';
+            return;
+        }
+        setUserId(nextId, 'url', true);
+        window.history.replaceState({}, '', buildSyncUrl(nextId));
+        appendLog('Sync id updated.');
+        hydratePlaybackPositionsFromServer();
+    };
+
+    const copySyncLink = async () => {
+        const link = buildSyncUrl(state.userId);
+        try {
+            await navigator.clipboard.writeText(link);
+            appendLog('Sync link copied to clipboard.');
+        } catch (err) {
+            appendLog(`Failed to copy sync link: ${err.message || err}`);
+        }
+    };
+
     const syncPlaybackPositionsToServer = async () => {
         if (!state.serverSyncAvailable) return;
-        const deviceId = getDeviceId();
+        const deviceId = state.userId;
         try {
             const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`, {
                 method: 'POST',
@@ -296,7 +390,7 @@
 
     const hydratePlaybackPositionsFromServer = async () => {
         if (!window.location.protocol.startsWith('http')) return;
-        const deviceId = getDeviceId();
+        const deviceId = state.userId;
         try {
             const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`);
             if (!response.ok) {
@@ -659,6 +753,13 @@
         elements.diagnosticsList.innerHTML = '';
         elements.diagnosticsEmpty.hidden = false;
     });
+    elements.syncUserApply.addEventListener('click', applySyncUser);
+    elements.syncUserCopy.addEventListener('click', copySyncLink);
+    elements.syncUserInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            applySyncUser();
+        }
+    });
     elements.toggleLogs.addEventListener('click', () => {
         state.logsVisible = !state.logsVisible;
         updateDiagnosticsVisibility();
@@ -716,6 +817,7 @@
         appendLog(`Unhandled rejection: ${event.reason?.message || event.reason || 'unknown'}`);
     });
 
+    initializeUserId();
     state.playbackPositions = loadPlaybackPositions();
     hydratePlaybackPositionsFromServer();
     updateDiagnosticsVisibility();
