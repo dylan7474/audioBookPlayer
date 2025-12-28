@@ -125,6 +125,7 @@
             <div class="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 sm:p-5 space-y-2 text-sm text-gray-400">
                 <h2 class="text-sm uppercase tracking-wide text-gray-500">About</h2>
                 <p>Your playback position is saved on this device so you can resume where you left off.</p>
+                <p>If server sync is enabled, positions are shared across devices.</p>
                 <p>Use the Library screen to scan a server or browse local folders.</p>
             </div>
         </section>
@@ -155,7 +156,7 @@
 </div>
 
 <script>
-    const APP_VERSION = "1.0.9";
+    const APP_VERSION = "1.1.0";
 
     const state = {
         books: {},
@@ -174,6 +175,8 @@
         sleepTimerEndsAt: null,
         logsVisible: true,
         activeScreen: 'library',
+        serverSyncAvailable: false,
+        serverSyncTimer: null,
     };
 
     const elements = {
@@ -207,6 +210,17 @@
     elements.appVersion.textContent = APP_VERSION;
 
     const PLAYBACK_STORAGE_KEY = 'audiobookPlayer.playbackPositions';
+    const DEVICE_ID_STORAGE_KEY = 'audiobookPlayer.deviceId';
+    const SERVER_SYNC_DEBOUNCE_MS = 1200;
+    const BOOKMARKS_ENDPOINT = './api/bookmarks';
+
+    const getDeviceId = () => {
+        const stored = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+        if (stored) return stored;
+        const generated = (crypto?.randomUUID && crypto.randomUUID()) || `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated);
+        return generated;
+    };
 
     const loadPlaybackPositions = () => {
         try {
@@ -221,8 +235,67 @@
     const savePlaybackPositions = () => {
         try {
             localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify(state.playbackPositions));
+            scheduleServerSync();
         } catch (err) {
             appendLog(`Failed to save playback positions: ${err.message || err}`);
+        }
+    };
+
+    const mergePlaybackPositions = (localPositions, remotePositions) => {
+        const merged = { ...localPositions };
+        Object.entries(remotePositions || {}).forEach(([key, value]) => {
+            if (typeof value !== 'number') return;
+            const localValue = typeof merged[key] === 'number' ? merged[key] : 0;
+            merged[key] = Math.max(localValue, value);
+        });
+        return merged;
+    };
+
+    const syncPlaybackPositionsToServer = async () => {
+        if (!state.serverSyncAvailable) return;
+        const deviceId = getDeviceId();
+        try {
+            const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playbackPositions: state.playbackPositions }),
+            });
+            if (!response.ok) {
+                throw new Error(`Sync failed (${response.status})`);
+            }
+            appendLog('Synced playback positions to server.');
+        } catch (err) {
+            appendLog(`Server sync error: ${err.message || err}`);
+        }
+    };
+
+    const scheduleServerSync = () => {
+        if (!state.serverSyncAvailable) return;
+        if (state.serverSyncTimer) {
+            clearTimeout(state.serverSyncTimer);
+        }
+        state.serverSyncTimer = setTimeout(() => {
+            state.serverSyncTimer = null;
+            syncPlaybackPositionsToServer();
+        }, SERVER_SYNC_DEBOUNCE_MS);
+    };
+
+    const hydratePlaybackPositionsFromServer = async () => {
+        if (!window.location.protocol.startsWith('http')) return;
+        const deviceId = getDeviceId();
+        try {
+            const response = await fetch(`${BOOKMARKS_ENDPOINT}?user=${encodeURIComponent(deviceId)}`);
+            if (!response.ok) {
+                throw new Error(`Server sync unavailable (${response.status})`);
+            }
+            const payload = await response.json();
+            const remotePositions = payload.playbackPositions || {};
+            state.playbackPositions = mergePlaybackPositions(state.playbackPositions, remotePositions);
+            state.serverSyncAvailable = true;
+            savePlaybackPositions();
+            appendLog('Loaded playback positions from server.');
+        } catch (err) {
+            appendLog(`Server sync unavailable: ${err.message || err}`);
         }
     };
 
@@ -626,6 +699,7 @@
     });
 
     state.playbackPositions = loadPlaybackPositions();
+    hydratePlaybackPositionsFromServer();
     updateDiagnosticsVisibility();
     setActiveScreen(state.activeScreen);
 

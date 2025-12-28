@@ -16,6 +16,7 @@ directory next to it.
 - **Browse Local Folder:** Select a local directory of MP3s to play in-browser.
 - **Playback:** Use the Player screen controls, or drag the seek bar to jump to a timestamp.
 - **Sleep Timer:** Use the 15/30 minute buttons on the Player screen to pause playback automatically.
+- **Server Sync (optional):** When `/api/bookmarks` is available, playback positions are merged and synced across devices. A device id is stored under `audiobookPlayer.deviceId`.
 - **Diagnostics:** Open Logs to review scan/playback events and clear as needed.
 
 ## Hosting on Debian with lighttpd
@@ -28,6 +29,38 @@ sudo systemctl force-reload lighttpd
 ```
 
 Place your audiobook folders inside a `books/` directory next to `index.html`.
+
+## Server-side bookmark sync (lighttpd + Node)
+
+The optional server-side sync keeps playback positions in sync across devices by proxying
+`/api/bookmarks` to a local Node server.
+
+1. Install Node.js on Debian:
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y nodejs
+   ```
+
+2. Start the API server (listens on localhost only):
+
+   ```bash
+   node server.js
+   ```
+
+3. Enable proxying in lighttpd (example config):
+
+   ```conf
+   server.modules += ( "mod_proxy" )
+
+   $HTTP["url"] =~ "^/api/" {
+       proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )
+   }
+   ```
+
+4. Restart lighttpd and load the site. The client will automatically sync when the endpoint is available.
+
+The server persists bookmark data at `data/bookmarks.json` (override with `DATA_FILE`).
 
 ## Roadmap
 
