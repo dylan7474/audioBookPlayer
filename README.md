@@ -124,6 +124,20 @@ Check Sync: Open browser logs (F12) to ensure the client connects to `/api/bookm
 
 The server persists bookmark data at `data/bookmarks.json` (override with `DATA_FILE`).
 
+### To deploy as a container use the script
+
+To use a specific port (e.g., 8080):
+
+Bash
+
+./deploy_audiobook.sh 8080
+To use the default port (3000):
+
+Bash
+
+./deploy_audiobook.sh
+
+
 ## Roadmap
 
 - Add playlist sorting and custom ordering.
