@@ -127,9 +127,9 @@ The server persists bookmark data at `data/bookmarks.json` (override with `DATA_
 ### To deploy as a container use the script
 
 To use a specific port (e.g., 8080):
-
-´´´./deploy_audiobook.sh 8080
-´´´
+```
+./deploy_audiobook.sh 8080
+```
 
 To use the default port (3000):
 
